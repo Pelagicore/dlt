@@ -20,7 +20,6 @@ Wants=dlt.service
 
 [Service]
 Type=Simple
-User=genivi
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-adaptor-udp -a @DLT_ADAPTOR_UDP_APPID@ -c @DLT_ADAPTOR_UDP_CTID@ -p @DLT_ADAPTOR_UDP_PORT@
 LimitCORE=infinity
 

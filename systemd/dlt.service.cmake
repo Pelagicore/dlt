@@ -20,7 +20,6 @@ Documentation=man:dlt-daemon(1) man:dlt.conf(5)
 
 [Service]
 Type=Simple
-User=genivi
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-daemon
 WatchdogSec=@DLT_WatchdogSec@
 NotifyAccess=main

@@ -21,7 +21,6 @@ Wants=dlt.service
 
 [Service]
 Type=Simple
-User=genivi
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-system
 WatchdogSec=@DLT_WatchdogSec@
 NotifyAccess=main

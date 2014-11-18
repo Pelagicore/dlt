@@ -20,6 +20,5 @@ Wants=dlt.service
 
 [Service]
 Type=Simple
-User=genivi
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-example-user "Hallo from GENIVI DLT example user application"
 LimitCORE=infinity
