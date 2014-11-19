@@ -58,5 +58,5 @@ install(TARGETS dlt-test-multi-process dlt-test-multi-process-client dlt-test-us
 	COMPONENT base)
 
 INSTALL(FILES dlt-test-filetransfer-file dlt-test-filetransfer-image.png
-	DESTINATION /usr/share/dlt-filetransfer
+	DESTINATION share/dlt-filetransfer
 )
