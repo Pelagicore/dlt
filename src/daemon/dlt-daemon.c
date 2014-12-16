@@ -661,8 +661,8 @@ int dlt_daemon_local_init_p1(DltDaemon *daemon, DltDaemonLocal *daemon_local, in
     if (ret==-1)
     {
         snprintf(str,DLT_DAEMON_TEXTBUFSIZE,"FIFO user dir %s cannot be chmoded!\n", DLT_USER_DIR);
-        dlt_log(LOG_ERR, str);
-        return -1;
+        dlt_log(LOG_WARNING, str);
+//        return -1;
     }
 
     /* Check for daemon mode */
