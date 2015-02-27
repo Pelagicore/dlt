@@ -19,6 +19,6 @@ Description=GENIVI DLT example user. Generate DLT messages and store them to fil
 Wants=dlt.service
 
 [Service]
-Type=Simple
+Type=simple
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-example-user "Hallo from GENIVI DLT example user application"
 LimitCORE=infinity

@@ -19,7 +19,7 @@ Description=GENIVI DLT adaptor stdin. Adaptor for forwarding received UDP messag
 Wants=dlt.service
 
 [Service]
-Type=Simple
+Type=simple
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-adaptor-udp -a @DLT_ADAPTOR_UDP_APPID@ -c @DLT_ADAPTOR_UDP_CTID@ -p @DLT_ADAPTOR_UDP_PORT@
 LimitCORE=infinity
 

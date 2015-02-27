@@ -20,6 +20,6 @@ Documentation=man:dlt-receive(1)
 Wants=dlt.service
 
 [Service]
-Type=Simple
+Type=simple
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-receive -o /tmp/dlt_receive_log.dlt localhost
 LimitCORE=infinity

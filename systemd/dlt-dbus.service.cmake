@@ -20,7 +20,7 @@ Documentation=man:dlt-dbus(1) man:dlt-dbus.conf(5)
 Wants=dlt.service
 
 [Service]
-Type=Simple
+Type=simple
 ExecStart=@CMAKE_INSTALL_PREFIX@/bin/dlt-dbus
 WatchdogSec=@DLT_WatchdogSec@
 NotifyAccess=main
