@@ -149,6 +149,14 @@ extern DltContext CONTEXT;
 	dlt_register_injection_callback(&(CONTEXT),SERVICEID, CALLBACK);} while(0)
 
 /**
+ * Register callback function called when log level of context was changed
+ * @param CONTEXT object containing information about one special logging context
+ * @param CALLBACK function pointer to callback function
+ */
+#define DLT_REGISTER_LOG_LEVEL_CHANGED_CALLBACK(CONTEXT, CALLBACK) do{\
+	dlt_register_log_level_changed_callback(&(CONTEXT),CALLBACK);} while(0)
+
+/**
  * Send log message with variable list of messages (intended for verbose mode)
  * @param CONTEXT object containing information about one special logging context
  * @param LOGLEVEL the log level of the log message
@@ -286,6 +294,18 @@ extern DltContext CONTEXT;
  */
 #define DLT_RAW(BUF,LEN) \
         dlt_user_log_write_raw(&log,BUF,LEN)
+#define DLT_HEX8(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_HEX8)
+#define DLT_HEX16(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_HEX16)
+#define DLT_HEX32(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_HEX32)
+#define DLT_HEX64(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_HEX64)
+#define DLT_BIN8(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_BIN8)
+#define DLT_BIN16(BUF,LEN) \
+        dlt_user_log_write_raw_formated(&log,BUF,LEN,DLT_FORMAT_BIN16)
 
 /**
  * Trace network message
@@ -423,6 +443,14 @@ extern DltContext CONTEXT;
 		{ \
 			dlt_log_raw(&(CONTEXT),LOGLEVEL,BUF,LEN); \
 		} \
+	} while(0)
+
+/**
+ * Send log message with marker.
+ */
+#define DLT_LOG_MARKER() \
+	do { \
+			dlt_log_marker(); \
 	} while(0)
 
 /**

@@ -163,6 +163,8 @@
 
 #define DLT_SCOD_ASCII      0x00000000
 #define DLT_SCOD_UTF8       0x00008000
+#define DLT_SCOD_HEX        0x00010000
+#define DLT_SCOD_BIN        0x00018000
 
 /*
  * Definitions of DLT services.
@@ -190,6 +192,7 @@
 #define DLT_SERVICE_ID_UNREGISTER_CONTEXT             0xf01 /**< Service ID: Message unregister context */
 #define DLT_SERVICE_ID_CONNECTION_INFO                0xf02 /**< Service ID: Message connection info */
 #define DLT_SERVICE_ID_TIMEZONE						  0xf03 /**< Service ID: Timezone */
+#define DLT_SERVICE_ID_MARKER						  0xf04 /**< Service ID: Marker */
 #define DLT_SERVICE_ID_CALLSW_CINJECTION              0xFFF /**< Service ID: Message Injection (minimal ID) */
 
 /*

@@ -102,6 +102,20 @@ typedef enum
 } DltLogLevelType;
 
 /**
+ * Definitions of DLT Format
+ */
+typedef enum
+{
+	DLT_FORMAT_DEFAULT   =          0x00,   /**< no sepecial format */
+	DLT_FORMAT_HEX8  =   		0x01, 	/**< Hex 8 */
+	DLT_FORMAT_HEX16 =   		0x02, 	/**< Hex 16 */
+	DLT_FORMAT_HEX32 =   		0x03, 	/**< Hex 32 */
+	DLT_FORMAT_HEX64 =   		0x04, 	/**< Hex 64 */
+	DLT_FORMAT_BIN8  =   		0x05, 	/**< Binary 8 */
+	DLT_FORMAT_BIN16 =   		0x06 	/**< Binary 16  */
+} DltFormatType;
+
+/**
  * Definitions of DLT trace status
  */
 typedef enum
@@ -186,6 +200,14 @@ typedef struct
 	int (*injection_callback)(uint32_t service_id, void *data, uint32_t length);
 } DltUserInjectionCallback;
 
+typedef struct
+{
+	char contextID[DLT_ID_SIZE];      /**< Context ID */
+    int8_t log_level;                 /**< Log level */
+    int8_t trace_status;              /**< Trace status */
+	void (*log_level_changed_callback) (char context_id[DLT_ID_SIZE],uint8_t log_level,uint8_t trace_status);
+} DltUserLogLevelChangedCallback;
+
 /**
  * This structure is used in a table managing all contexts and the corresponding log levels in an application.
  */
@@ -199,6 +221,10 @@ typedef struct
     char *context_description;        /**< description of context */
     DltUserInjectionCallback *injection_table; /**< Table with pointer to injection functions and service ids */
     uint32_t nrcallbacks;
+
+    // Log Level changed callback
+	void (*log_level_changed_callback) (char context_id[DLT_ID_SIZE],uint8_t log_level,uint8_t trace_status);
+
 } dlt_ll_ts_type;
 
 /**
@@ -262,21 +288,25 @@ typedef struct
 /**
  * Initialise the generation of a DLT log message (intended for usage in non-verbose mode)
  * This function has to be called first, when an application wants to send a new log messages.
+ * Following functions like dlt_user_log_write_string and dlt_user_log_write_finish must only be called,
+ * when return value is bigger than zero.
  * @param handle pointer to an object containing information about one special logging context
  * @param log pointer to an object containing information about logging context data
  * @param loglevel this is the current log level of the log message to be sent
- * @return negative value if there was an error
+ * @return negative value if there was an error, zero if log level is below current log level, one if log level is matching
  */
 int dlt_user_log_write_start(DltContext *handle, DltContextData *log, DltLogLevelType loglevel);
 
 /**
  * Initialise the generation of a DLT log message (intended for usage in verbose mode)
  * This function has to be called first, when an application wants to send a new log messages.
+ * Following functions like dlt_user_log_write_string and dlt_user_log_write_finish must only be called,
+ * when return value is bigger than zero.
  * @param handle pointer to an object containing information about one special logging context
  * @param log pointer to an object containing information about logging context data
  * @param loglevel this is the current log level of the log message to be sent
  * @param messageid message id of message
- * @return negative value if there was an error
+ * @return negative value if there was an error, zero if log level is below current log level, one if log level is matching
  */
 int dlt_user_log_write_start_id(DltContext *handle, DltContextData *log, DltLogLevelType loglevel, uint32_t messageid);
 
@@ -385,6 +415,18 @@ int dlt_user_log_write_utf8_string(DltContextData *log, const char *text);
  * @return negative value if there was an error
  */
 int dlt_user_log_write_raw(DltContextData *log,void *data,uint16_t length);
+
+/**
+ * Write a binary memory block into a DLT log message.
+ * dlt_user_log_write_start has to be called before adding any attributes to the log message.
+ * Finish sending log message by calling dlt_user_log_write_finish.
+ * @param log pointer to an object containing information about logging context data
+ * @param data pointer to the parameter written into log message.
+ * @param length length in bytes of the parameter written into log message.
+ * @param type the format information.
+ * @return negative value if there was an error
+ */
+int dlt_user_log_write_raw_formated(DltContextData *log,void *data,uint16_t length,DltFormatType type);
 
 /**
  * Trace network message
@@ -537,6 +579,15 @@ int dlt_register_injection_callback(DltContext *handle, uint32_t service_id,
       int (*dlt_injection_callback)(uint32_t service_id, void *data, uint32_t length));
 
 /**
+ * Register callback function called when log level of context was changed
+ * @param handle pointer to an object containing information about one special logging context
+ * @param (*dlt_log_level_changed_callback) function pointer to callback function
+ * @return negative value if there was an error
+ */
+int dlt_register_log_level_changed_callback(DltContext *handle,
+      void (*dlt_log_level_changed_callback)(char context_id[DLT_ID_SIZE],uint8_t log_level, uint8_t trace_status));
+
+/**
  * Switch to verbose mode
  *
  */
@@ -666,6 +717,11 @@ int dlt_log_uint(DltContext *handle,DltLogLevelType loglevel, unsigned int data)
  */
 int dlt_log_raw(DltContext *handle,DltLogLevelType loglevel, void *data,uint16_t length);
 
+/**
+ * Write marker message to DLT.
+ * @return negative value if there was an error
+ */
+int dlt_log_marker();
 
 /**
  * Forward a complete DLT message to the DLT daemon

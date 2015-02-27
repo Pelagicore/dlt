@@ -97,6 +97,7 @@ static int dlt_user_log_send_register_context(DltContextData *log);
 static int dlt_user_log_send_unregister_context(DltContextData *log);
 static int dlt_send_app_ll_ts_limit(const char *appid, DltLogLevelType loglevel, DltTraceStatusType tracestatus);
 static int dlt_user_log_send_log_mode(DltUserLogMode mode);
+static int dlt_user_log_send_marker();
 static int dlt_user_print_msg(DltMessage *msg, DltContextData *log);
 static int dlt_user_log_check_user_message(void);
 static void dlt_user_log_reattach_to_daemon(void);
@@ -586,6 +587,7 @@ int dlt_free(void)
                 dlt_user.dlt_ll_ts[i].injection_table = 0;
             }
             dlt_user.dlt_ll_ts[i].nrcallbacks     = 0;
+            dlt_user.dlt_ll_ts[i].log_level_changed_callback = 0;
         }
 
         free(dlt_user.dlt_ll_ts);
@@ -814,6 +816,8 @@ int dlt_register_context_ll_ts(DltContext *handle, const char *contextid, const 
 
 			dlt_user.dlt_ll_ts[i].injection_table = 0;
 			dlt_user.dlt_ll_ts[i].nrcallbacks     = 0;
+			dlt_user.dlt_ll_ts[i].log_level_changed_callback = 0;
+
 		}
 	}
 	else
@@ -858,6 +862,7 @@ int dlt_register_context_ll_ts(DltContext *handle, const char *contextid, const 
 
 				dlt_user.dlt_ll_ts[i].injection_table = 0;
 				dlt_user.dlt_ll_ts[i].nrcallbacks     = 0;
+				dlt_user.dlt_ll_ts[i].log_level_changed_callback = 0;
 			}
 		}
 	}
@@ -1036,6 +1041,7 @@ int dlt_unregister_context(DltContext *handle)
         }
 
         dlt_user.dlt_ll_ts[handle->log_level_pos].nrcallbacks     = 0;
+		dlt_user.dlt_ll_ts[handle->log_level_pos].log_level_changed_callback = 0;
     }
 
     DLT_SEM_FREE();
@@ -1259,10 +1265,14 @@ int dlt_user_log_write_start_id(DltContext *handle, DltContextData *log,DltLogLe
         return -1;
     }
 
+    /* initialize values */
+	log->args_num = 0;
+	log->log_level = loglevel;
+    log->size = 0;
+
+    /* check log levels */
     if (handle->log_level_ptr && (loglevel<=(int)*(handle->log_level_ptr) ) && (loglevel!=0))
     {
-		log->args_num = 0;
-    	log->log_level = loglevel;
 
         /* In non-verbose mode, insert message id */
         if (dlt_user.verbose_mode==0)
@@ -1278,8 +1288,11 @@ int dlt_user_log_write_start_id(DltContext *handle, DltContextData *log,DltLogLe
             /* as the message id is part of each message in non-verbose mode,
                it doesn't increment the argument counter in extended header (if used) */
         }
-        else log->size=0;
         return 1;
+    }
+    else
+    {
+    	return 0;
     }
 
     return -1;
@@ -1296,6 +1309,11 @@ int dlt_user_log_write_finish(DltContextData *log)
 }
 
 int dlt_user_log_write_raw(DltContextData *log,void *data,uint16_t length)
+{
+	return dlt_user_log_write_raw_formated(log,data,length,DLT_FORMAT_DEFAULT);
+}
+
+int dlt_user_log_write_raw_formated(DltContextData *log,void *data,uint16_t length,DltFormatType type)
 {
     uint16_t arg_size;
     uint32_t type_info;
@@ -1319,6 +1337,17 @@ int dlt_user_log_write_raw(DltContextData *log,void *data,uint16_t length)
 
         /* Transmit type information */
         type_info = DLT_TYPE_INFO_RAWD;
+
+        if(type>=DLT_FORMAT_HEX8 && type<=DLT_FORMAT_HEX64)
+        {
+        	type_info |= DLT_SCOD_HEX;
+        	type_info += type;
+        }
+        else if(type>=DLT_FORMAT_BIN8 && type<=DLT_FORMAT_BIN16)
+        {
+        	type_info |= DLT_SCOD_BIN;
+        	type_info += type - DLT_FORMAT_BIN8 + 1;
+        }
 
         memcpy((log->buffer)+log->size,&(type_info),sizeof(uint32_t));
         log->size += sizeof(uint32_t);
@@ -2002,6 +2031,48 @@ int dlt_register_injection_callback(DltContext *handle, uint32_t service_id,
     return 0;
 }
 
+int dlt_register_log_level_changed_callback(DltContext *handle,
+			void (*dlt_log_level_changed_callback)(char context_id[DLT_ID_SIZE],uint8_t log_level, uint8_t trace_status))
+{
+    DltContextData log;
+    uint32_t i;
+
+    if (handle==0)
+    {
+        return -1;
+    }
+
+    if (dlt_user_log_init(handle, &log)==-1)
+    {
+		return -1;
+    }
+
+    /* This function doesn't make sense storing to local file is choosen;
+       so terminate this function */
+    if (dlt_user.dlt_is_file)
+    {
+        return 0;
+    }
+
+    DLT_SEM_LOCK();
+
+    if (dlt_user.dlt_ll_ts==0)
+    {
+        DLT_SEM_FREE();
+        return 0;
+    }
+
+    /* Insert callback in corresponding table */
+    i=handle->log_level_pos;
+
+    /* Store new callback function */
+    dlt_user.dlt_ll_ts[i].log_level_changed_callback = dlt_log_level_changed_callback;
+
+    DLT_SEM_FREE();
+
+    return 0;
+}
+
 /**
  * NW Trace related
  */
@@ -2474,10 +2545,10 @@ int dlt_user_trace_network_truncated(DltContext *handle, DltNetworkTraceType nw_
             }
 
         	/**
-        	 *  Calculate maximum avaialble space in sending buffer after headers.
+        	 *  Calculate maximum available space in sending buffer after headers.
         	 */
 
-        	int truncated_payload_len = DLT_USER_BUF_MAX_SIZE -
+            int truncated_payload_len = DLT_USER_BUF_MAX_SIZE -
         			log.size - sizeof(uint16_t) - sizeof(uint32_t);
 
             /* Write truncated payload */
@@ -2693,6 +2764,19 @@ int dlt_log_raw(DltContext *handle,DltLogLevelType loglevel, void *data,uint16_t
     }
 
     return 0;
+}
+
+int dlt_log_marker()
+{
+    if (dlt_user_initialised==0)
+    {
+        if (dlt_init()<0)
+        {
+            return -1;
+        }
+    }
+
+    return dlt_user_log_send_marker();
 }
 
 int dlt_verbose_mode(void)
@@ -3512,6 +3596,28 @@ int dlt_user_log_send_log_mode(DltUserLogMode mode)
     return ((ret==DLT_RETURN_OK)?0:-1);
 }
 
+int dlt_user_log_send_marker()
+{
+    DltUserHeader userheader;
+
+    DltReturnValue ret;
+
+    /* set userheader */
+    if (dlt_user_set_userheader(&userheader, DLT_USER_MESSAGE_MARKER)==-1)
+    {
+    	return -1;
+    }
+
+    if (dlt_user.dlt_is_file)
+    {
+        return 0;
+    }
+
+    /* log to FIFO */
+    ret=dlt_user_log_out2(dlt_user.dlt_log_handle, &(userheader), sizeof(DltUserHeader), 0, 0);
+    return ((ret==DLT_RETURN_OK)?0:-1);
+}
+
 int dlt_user_print_msg(DltMessage *msg, DltContextData *log)
 {
     uint8_t *databuffer_tmp;
@@ -3570,12 +3676,14 @@ int dlt_user_log_check_user_message(void)
 
     /* For delayed calling of injection callback, to avoid deadlock */
     DltUserInjectionCallback 	delayed_injection_callback;
+    DltUserLogLevelChangedCallback delayed_log_level_changed_callback;
     unsigned char				*delayed_inject_buffer = 0;
     uint32_t					delayed_inject_data_length = 0;
 
     /* Ensure that callback is null before searching for it */
     delayed_injection_callback.injection_callback = 0;
     delayed_injection_callback.service_id = 0;
+    delayed_log_level_changed_callback.log_level_changed_callback = 0;
 
     if (dlt_user.dlt_user_handle!=DLT_FD_INIT)
     {
@@ -3653,10 +3761,23 @@ int dlt_user_log_check_user_message(void)
                                 	*(dlt_user.dlt_ll_ts[usercontextll->log_level_pos].log_level_ptr) = usercontextll->log_level;
                                 if(dlt_user.dlt_ll_ts[usercontextll->log_level_pos].trace_status_ptr)
                                 	*(dlt_user.dlt_ll_ts[usercontextll->log_level_pos].trace_status_ptr) = usercontextll->trace_status;
+
+                                delayed_log_level_changed_callback.log_level_changed_callback = dlt_user.dlt_ll_ts[usercontextll->log_level_pos].log_level_changed_callback;
+                                memcpy(delayed_log_level_changed_callback.contextID,dlt_user.dlt_ll_ts[usercontextll->log_level_pos].contextID,DLT_ID_SIZE);
+                                delayed_log_level_changed_callback.log_level = usercontextll->log_level;
+                                delayed_log_level_changed_callback.trace_status = usercontextll->trace_status;
                             }
                         }
 
                         DLT_SEM_FREE();
+                    }
+
+                    /* call callback outside of semaphore */
+                    if(delayed_log_level_changed_callback.log_level_changed_callback!=0)
+                    {
+                    	delayed_log_level_changed_callback.log_level_changed_callback(delayed_log_level_changed_callback.contextID,
+                    			                                                      delayed_log_level_changed_callback.log_level,
+                    			                                                      delayed_log_level_changed_callback.trace_status);
                     }
 
                     /* keep not read data in buffer */
