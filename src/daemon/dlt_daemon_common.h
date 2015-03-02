@@ -118,9 +118,11 @@ typedef struct
 {
 	char  apid[DLT_ID_SIZE];                  /**< application id */
 	pid_t pid;                   /**< process id of user application */
-	int user_handle;    /**< connection handle for connection to user application */
 	char *application_description; /**< context description */
 	int num_contexts; /**< number of contexts for this application */
+	DltReceiver receiver;
+	int id;
+	char disconnected;
 } DltDaemonApplication;
 
 /**
@@ -133,8 +135,8 @@ typedef struct
 	int8_t log_level;		/**< the current log level of the context */
 	int8_t trace_status;	/**< the current trace status of the context */
 	int log_level_pos;  /**< offset of context in context field on user application */
-	int user_handle;    /**< connection handle for connection to user application */
 	char *context_description; /**< context description */
+	DltDaemonApplication *app;
 } DltDaemonContext;
 
 /**
@@ -160,8 +162,13 @@ typedef struct
     DltUserLogMode mode;	/**< Mode used for tracing: off, external, internal, both */
     char connectionState;				/**< state for tracing: 0 = no client connected, 1 = client connected */
     char *ECUVersionString; /**< Version string to send to client. Loaded from a file at startup. May be null. */
+    char appDisconnected;   /** Set to true if some application has disconnected, which means some cleanup is needed */
     DltDaemonState state;   /**< the current logging state of dlt daemon. */
+    struct DltDaemonLocal *dltDaemonLocal;
+    int nextApplicationID;
 } DltDaemon;
+
+struct DltDaemonLocal;
 
 /**
  * Initialise the dlt daemon structure
@@ -192,7 +199,7 @@ int dlt_daemon_free(DltDaemon *daemon,int verbose);
  * @param verbose if set to true verbose information is printed out.
  * @return Pointer to added context, null pointer on error
  */
-DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid,pid_t pid,char *description, int verbose);
+DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid, int fd, pid_t pid,const char *description, int verbose);
 /**
  * Delete application from internal application management
  * @param daemon pointer to dlt daemon structure
@@ -254,7 +261,7 @@ int dlt_daemon_applications_clear(DltDaemon *daemon,int verbose);
  * @param verbose if set to true verbose information is printed out.
  * @return Pointer to added context, null pointer on error
  */
-DltDaemonContext* dlt_daemon_context_add(DltDaemon *daemon,char *apid,char *ctid,int8_t log_level,int8_t trace_status,int log_level_pos, int user_handle,char *description,int verbose);
+DltDaemonContext* dlt_daemon_context_add(DltDaemon *daemon, DltDaemonApplication *application, char *ctid,int8_t log_level,int8_t trace_status,int log_level_pos, char *description,int verbose);
 /**
  * Delete context from internal context management
  * @param daemon pointer to dlt daemon structure
@@ -262,7 +269,7 @@ DltDaemonContext* dlt_daemon_context_add(DltDaemon *daemon,char *apid,char *ctid
  * @param verbose if set to true verbose information is printed out.
  * @return negative value if there was an error
  */
-int dlt_daemon_context_del(DltDaemon *daemon, DltDaemonContext* context, int verbose);
+int dlt_daemon_context_del(DltDaemon *daemon, DltDaemonContext* context, DltDaemonApplication *application, int verbose);
 /**
  * Find context with specific application id and context id
  * @param daemon pointer to dlt daemon structure
@@ -370,6 +377,27 @@ void dlt_daemon_control_reset_to_factory_default(DltDaemon *daemon,const char *f
  * @param newState the requested new state
  */
 void dlt_daemon_change_state(DltDaemon *daemon, DltDaemonState newState);
+
+DltDaemonApplication* dlt_daemon_get_application_for_file_descriptor(DltDaemon* daemon_local, int fd);
+
+DltDaemonApplication* dlt_daemon_get_application_for_id(DltDaemon* daemon, int id);
+
+void dlt_daemon_disconnect_application(DltDaemon *daemon, DltDaemonApplication *app);
+
+int dlt_daemon_user_send_log_state(DltDaemon *daemon, DltDaemonApplication *app, int verbose);
+
+void dlt_daemon_stop_listen_file_descriptor(DltDaemon *daemon, int fd);
+
+void dlt_daemon_listen_file_descriptor(DltDaemon *daemon, int fd);
+
+void dlt_daemon_on_client_disconnected(DltDaemon *daemon, int fd);
+
+int dlt_daemon_unregister_application(DltDaemon *daemon, DltDaemonApplication *application, int verbose);
+
+/**
+ * Sort the application array and return the new pointer to the application given as parameter
+ */
+DltDaemonApplication* dlt_daemon_update_application_array(DltDaemon *daemon, DltDaemonApplication *app);
 
 #ifdef __cplusplus
 }

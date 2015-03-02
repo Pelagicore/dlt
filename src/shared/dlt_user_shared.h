@@ -102,7 +102,6 @@ typedef struct
 typedef struct
 {
 	char apid[DLT_ID_SIZE];          /**< application id */
-	pid_t pid;                       /**< process id of user application */
     uint32_t description_length;     /**< length of description */
 } PACKED DltUserControlMsgRegisterApplication;
 
@@ -111,8 +110,6 @@ typedef struct
  */
 typedef struct
 {
-	char apid[DLT_ID_SIZE];         /**< application id */
-    pid_t pid;                      /**< process id of user application */
 } PACKED DltUserControlMsgUnregisterApplication;
 
 /**
@@ -120,12 +117,10 @@ typedef struct
  */
 typedef struct
 {
-	char apid[DLT_ID_SIZE];          /**< application id */
 	char ctid[DLT_ID_SIZE];          /**< context id */
 	int32_t log_level_pos;           /**< offset in management structure on user-application side */
 	int8_t log_level;                /**< log level */
 	int8_t trace_status;             /**< trace status */
-	pid_t pid;                       /**< process id of user application */
     uint32_t description_length;     /**< length of description */
 } PACKED DltUserControlMsgRegisterContext;
 
@@ -134,9 +129,7 @@ typedef struct
  */
 typedef struct
 {
-	char apid[DLT_ID_SIZE];         /**< application id */
 	char ctid[DLT_ID_SIZE];         /**< context id */
-	pid_t pid;                      /**< process id of user application */
 } PACKED DltUserControlMsgUnregisterContext;
 
 /**

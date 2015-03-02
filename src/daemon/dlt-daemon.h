@@ -80,6 +80,8 @@
 #include <sys/time.h>
 
 
+#define ARRAY_ELEMENT_COUNT(array) ( sizeof(array) / sizeof(array[0]) )
+
 /**
  * The flags of a dlt daemon.
  */
@@ -115,10 +117,10 @@ typedef struct
 /**
  * The global parameters of a dlt daemon.
  */
-typedef struct
+typedef struct DltDaemonLocal
 {
     DltDaemonFlags flags;     /**< flags of the daemon */
-    int fp;               /**< handle for own fifo */
+    int local_socket;               /**< handle for local socket */
     int sock;             /**< handle for tcp connection to client */
     int fdserial;         /**< handle for serial connection */
     int fdmax;            /**< highest number of used handles */
@@ -127,10 +129,10 @@ typedef struct
     DltFile file;             /**< struct for file access */
     //int ohandle;          /**< handle to output file */
     DltMessage msg;           /**< one dlt message */
-    DltReceiver receiver;     /**< receiver for fifo connection */
     DltReceiver receiverSock; /**< receiver for socket connection */
     DltReceiver receiverSerial; /**< receiver for serial connection */
     int client_connections;    /**< counter for nr. of client connections */
+    int client_fds[10];			/**< Array of file descriptors of connected clients */
     size_t baudrate;          /**< Baudrate of serial connection */
 #ifdef DLT_SHM_ENABLE
     DltShm dlt_shm;				/**< Shared memory handling */
@@ -178,23 +180,23 @@ void dlt_daemon_daemonize(int verbose);
 void dlt_daemon_signal_handler(int sig);
 
 int dlt_daemon_process_client_connect(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_client_messages(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+int dlt_daemon_process_client_messages(DltDaemon *daemon, DltDaemonLocal *daemon_local, int sock, int verbose);
 int dlt_daemon_process_client_messages_serial(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_messages(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+int dlt_daemon_process_user_messages(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
 
-int dlt_daemon_process_user_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+int dlt_daemon_process_user_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
 int dlt_daemon_send_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_unregister_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_register_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_unregister_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_log(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+DltDaemonApplication*  dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonApplication* app, int verbose);
+int dlt_daemon_process_user_message_unregister_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
+int dlt_daemon_process_user_message_register_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
+int dlt_daemon_process_user_message_unregister_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
+int dlt_daemon_process_user_message_log(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication* app, int verbose);
 #ifdef DLT_SHM_ENABLE
 int dlt_daemon_process_user_message_log_shm(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 #endif
-int dlt_daemon_process_user_message_set_app_ll_ts(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_log_mode(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_marker(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+int dlt_daemon_process_user_message_set_app_ll_ts(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication *app, int verbose);
+int dlt_daemon_process_user_message_log_mode(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication *app, int verbose);
+int dlt_daemon_process_user_message_marker(DltDaemon *daemon, DltDaemonLocal *daemon_local, DltDaemonApplication *app, int verbose);
 
 int dlt_daemon_send_ringbuffer_to_client(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 void dlt_daemon_timingpacket_thread(void *ptr);
@@ -203,7 +205,7 @@ void dlt_daemon_ecu_version_thread(void *ptr);
 	void dlt_daemon_systemd_watchdog_thread(void *ptr);
 #endif
 
-int create_timer_fd(DltDaemonLocal *daemon_local, int period_sec, int starts_in, int* fd, const char* timer_name);
+int create_timer_fd(DltDaemon *daemon, int period_sec, int starts_in, int* fd, const char* timer_name);
 
 int dlt_daemon_close_socket(int sock, DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 

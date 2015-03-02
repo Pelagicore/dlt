@@ -88,8 +88,8 @@ int dlt_buffer_get(DltBuffer *buf,unsigned char *data, int max_size,int delete);
 int dlt_buffer_reset(DltBuffer *buf);
 int dlt_buffer_increase_size(DltBuffer *buf);
 int dlt_buffer_minimize_size(DltBuffer *buf);
-void dlt_buffer_write_block(DltBuffer *buf,int *write, const unsigned char *data,unsigned int size);
-void dlt_buffer_read_block(DltBuffer *buf,int *read,unsigned char *data,unsigned int size);
+void dlt_buffer_write_block(DltBuffer *buf,int *write, const void *data,unsigned int size);
+void dlt_buffer_read_block(DltBuffer *buf,int *read,void *data,unsigned int size);
 
 void dlt_print_hex(uint8_t *ptr,int size)
 {
@@ -2144,7 +2144,7 @@ int dlt_receiver_receive_fd(DltReceiver *receiver)
         return -1;
     }
 
-    receiver->buf = (char *)receiver->buffer;
+    receiver->buf = receiver->buffer;
     receiver->lastBytesRcvd = receiver->bytesRcvd;
 
     /* wait for data from fd */
@@ -2389,7 +2389,7 @@ int dlt_buffer_free_dynamic(DltBuffer *buf)
 	return 0;
 }
 
-void dlt_buffer_write_block(DltBuffer *buf,int *write, const unsigned char *data,unsigned int size)
+void dlt_buffer_write_block(DltBuffer *buf,int *write, const void *data,unsigned int size)
 {
     // catch null pointer
     if(buf && write && data) {
@@ -2407,7 +2407,7 @@ void dlt_buffer_write_block(DltBuffer *buf,int *write, const unsigned char *data
     }
 }
 
-void dlt_buffer_read_block(DltBuffer *buf,int *read,unsigned char *data,unsigned int size)
+void dlt_buffer_read_block(DltBuffer *buf,int *read,void *data,unsigned int size)
 {
     // catch nullpointer
     if(buf && read && data) {

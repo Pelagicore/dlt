@@ -54,6 +54,7 @@
 #include "dlt-daemon.h"
 #include "dlt-daemon_cfg.h"
 #include "dlt_daemon_common_cfg.h"
+#include "dlt_common.h"
 
 #include "dlt_daemon_socket.h"
 #include "dlt_daemon_serial.h"
@@ -66,7 +67,6 @@ static char str[DLT_DAEMON_TEXTBUFSIZE];
 int dlt_daemon_client_send(int sock,DltDaemon *daemon,DltDaemonLocal *daemon_local,void* storage_header,int storage_header_size,void* data1,int size1,void* data2,int size2,int verbose)
 {
 	int ret;
-	int j;
 
     if (sock!=DLT_DAEMON_SEND_TO_ALL && sock!=DLT_DAEMON_SEND_FORCE)
     {
@@ -92,6 +92,7 @@ int dlt_daemon_client_send(int sock,DltDaemon *daemon,DltDaemonLocal *daemon_loc
             {
                 DLT_DAEMON_SEM_FREE();
                 dlt_log(LOG_WARNING,"dlt_daemon_client_send: socket send dlt message failed\n");
+                dlt_daemon_close_socket(sock,daemon, daemon->dltDaemonLocal,verbose);
                 return ret;
             }
 
@@ -128,24 +129,22 @@ int dlt_daemon_client_send(int sock,DltDaemon *daemon,DltDaemonLocal *daemon_loc
 		if ((sock==DLT_DAEMON_SEND_FORCE) || (daemon->state == DLT_DAEMON_STATE_SEND_DIRECT))
 		{
 			int sent = 0;
+			size_t index;
 			/* look if TCP connection to client is available */
-			for (j = 0; j <= daemon_local->fdmax; j++)
+			for (index = 0; index < ARRAY_ELEMENT_COUNT(daemon_local->client_fds); index++)
 			{
+				int fd = daemon_local->client_fds[index];
 				/* send to everyone! */
-				if (FD_ISSET(j, &(daemon_local->master)))
+
+				if (fd != DLT_FD_INIT)
 				{
-					if ((j != daemon_local->fp) && (j != daemon_local->sock) && (j != daemon_local->sock)
-		#ifdef DLT_SYSTEMD_WATCHDOG_ENABLE
-								&& (j!=daemon_local->timer_wd)
-		#endif
-					&& (j!=daemon_local->timer_one_s) && (j!=daemon_local->timer_sixty_s))
 					{
 						/* Send message */
-						if (isatty(j))
+						if (isatty(fd))
 						{
 							DLT_DAEMON_SEM_LOCK();
 
-							if((ret=dlt_daemon_serial_send(j,data1,size1,data2,size2,daemon->sendserialheader)))
+							if((ret=dlt_daemon_serial_send(fd,data1,size1,data2,size2,daemon->sendserialheader)))
 							{
 								DLT_DAEMON_SEM_FREE();
 								dlt_log(LOG_WARNING,"dlt_daemon_client_send: serial send dlt message failed\n");
@@ -158,11 +157,11 @@ int dlt_daemon_client_send(int sock,DltDaemon *daemon,DltDaemonLocal *daemon_loc
 						{
 							DLT_DAEMON_SEM_LOCK();
 
-							if((ret=dlt_daemon_socket_send(j,data1,size1,data2,size2,daemon->sendserialheader)))
+							if((ret=dlt_daemon_socket_send(fd,data1,size1,data2,size2,daemon->sendserialheader)))
 							{
 								DLT_DAEMON_SEM_FREE();
 								dlt_log(LOG_WARNING,"dlt_daemon_client_send: socket send dlt message failed\n");
-								dlt_daemon_close_socket(j, daemon, daemon_local, verbose);
+								dlt_daemon_close_socket(fd, daemon, daemon_local, verbose);
 								return ret;
 							}
 
@@ -1337,16 +1336,14 @@ void dlt_daemon_control_callsw_cinjection(int sock, DltDaemon *daemon, DltDaemon
 
 		/* write to FIFO */
 		DltReturnValue ret =
-				dlt_user_log_out3(context->user_handle, &(userheader), sizeof(DltUserHeader),
+				dlt_user_log_out3(context->app->receiver.fd, &(userheader), sizeof(DltUserHeader),
 				  &(usercontext), sizeof(DltUserControlMsgInjection),
 				  userbuffer, data_length_inject);
 		if (ret != DLT_RETURN_OK)
 		{
 			if (ret == DLT_RETURN_PIPE_ERROR)
 			{
-				/* Close connection */
-				close(context->user_handle);
-				context->user_handle=DLT_FD_INIT;
+				dlt_daemon_disconnect_application(NULL, context->app);
 			}
 			dlt_daemon_control_service_response(sock, daemon, daemon_local, id, DLT_SERVICE_RESPONSE_ERROR,  verbose);
 		}
@@ -1395,7 +1392,7 @@ void dlt_daemon_control_set_log_level(int sock, DltDaemon *daemon, DltDaemonLoca
         old_log_level = context->log_level;
         context->log_level = req->log_level; /* No endianess conversion necessary*/
 
-        if ((context->user_handle >= DLT_FD_MINIMUM) &&
+        if ((context->app != NULL) &&
                 (dlt_daemon_user_send_log_level(daemon, context, verbose)==0))
         {
             dlt_daemon_control_service_response(sock, daemon, daemon_local, id, DLT_SERVICE_RESPONSE_OK,  verbose);
@@ -1443,7 +1440,7 @@ void dlt_daemon_control_set_trace_status(int sock, DltDaemon *daemon, DltDaemonL
         old_trace_status = context->trace_status;
         context->trace_status = req->log_level;   /* No endianess conversion necessary */
 
-        if ((context->user_handle >= DLT_FD_MINIMUM ) &&
+        if ((context->app != NULL ) &&
                 (dlt_daemon_user_send_log_level(daemon, context, verbose)==0))
         {
             dlt_daemon_control_service_response(sock, daemon, daemon_local, id, DLT_SERVICE_RESPONSE_OK,  verbose);

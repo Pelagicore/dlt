@@ -191,8 +191,12 @@ enum {
 #define DLT_DAEMON_TCP_PORT 3490
 
 
-/* Initi value for file descritpor */
+/* Initial value for file descriptor */
 #define DLT_FD_INIT -1
+
+#define DLT_PID_INIT 0
+
+#define DLT_UNKNOWN_DESCRIPTION "Unknown app"
 
 /* Minimum value for a file descriptor except the POSIX Standards: stdin=0, stdout=1, stderr=2 */
 #define DLT_FD_MINIMUM 3
