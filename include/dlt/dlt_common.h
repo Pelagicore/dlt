@@ -70,7 +70,7 @@
   \addtogroup commonapi
   \{
 */
-
+#include <assert.h>
 #include <stdio.h>
 
 #if !defined(_MSC_VER)

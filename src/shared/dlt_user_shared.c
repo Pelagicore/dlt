@@ -182,3 +182,59 @@ DltReturnValue dlt_user_log_out3(int handle, void *ptr1, size_t len1, void* ptr2
 
     return DLT_RETURN_OK;
 }
+
+
+
+DltReturnValue dlt_user_log_out3_with_size_header(int handle, void *ptr1, size_t len1, void* ptr2, size_t len2, void *ptr3, size_t len3)
+{
+    struct iovec iov[4];
+    uint32_t bytes_written;
+
+    if (handle<=0)
+    {
+        /* Invalid handle */
+        return DLT_RETURN_ERROR;
+    }
+
+    size_t totalSize = len1 + len2 + len3;
+
+    iov[0].iov_base = &totalSize;
+    iov[0].iov_len = sizeof(totalSize);
+    iov[1].iov_base = ptr1;
+    iov[1].iov_len = len1;
+    iov[2].iov_base = ptr2;
+    iov[2].iov_len = len2;
+    iov[3].iov_base = ptr3;
+    iov[3].iov_len = len3;
+
+    bytes_written = writev(handle, iov, sizeof(iov) / sizeof(iov[0]));
+
+    if (bytes_written!=totalSize + sizeof(totalSize))
+    {
+        switch(errno)
+        {
+            case EBADF:
+            {
+                return DLT_RETURN_PIPE_ERROR; /* EBADF - handle not open */
+                break;
+            }
+            case EPIPE:
+            {
+                return DLT_RETURN_PIPE_ERROR; /* EPIPE - pipe error */
+                break;
+            }
+            case EAGAIN:
+            {
+                return DLT_RETURN_PIPE_FULL; /* EAGAIN - data could not be written */
+                break;
+            }
+            default:
+            {
+                break;
+            }
+        }
+        return DLT_RETURN_ERROR;
+    }
+
+    return DLT_RETURN_OK;
+}

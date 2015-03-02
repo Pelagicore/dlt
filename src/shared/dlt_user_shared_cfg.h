@@ -67,14 +67,17 @@
 #define DLT_USER_SHARED_CFG_H
 
 /*************/
-/* Changable */
+/* Changeable */
 /*************/
 
-/* Directory, where the named pipes to the DLT daemon resides */
-#define DLT_USER_DIR  "/tmp/dltpipes"
+/* Directory, where some runtime files reside. TODO : rename the folder since it does not contain client pipes anymore */
+#define DLT_RUN_DIR  "/tmp/dltpipes"
 
 /* Name of named pipe to DLT daemon */
 #define DLT_USER_FIFO "/tmp/dlt"
+
+/* Name of named pipe to DLT daemon */
+#define DLT_USER_SOCKET_PATH "/tmp/dltsocket"
 
 /************************/
 /* Don't change please! */

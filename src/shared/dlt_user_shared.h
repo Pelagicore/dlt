@@ -98,7 +98,7 @@ typedef struct
 typedef struct
 {
 	char apid[DLT_ID_SIZE];          /**< application id */
-	pid_t pid;                       /**< process id of user application */
+//	pid_t pid;                       /**< process id of user application */
     uint32_t description_length;     /**< length of description */
 } PACKED DltUserControlMsgRegisterApplication;
 
@@ -235,5 +235,7 @@ DltReturnValue dlt_user_log_out2(int handle, void *ptr1, size_t len1, void* ptr2
  * @return Value from DltReturnValue enum
  */
 DltReturnValue dlt_user_log_out3(int handle, void *ptr1, size_t len1, void* ptr2, size_t len2, void *ptr3, size_t len3);
+
+DltReturnValue dlt_user_log_out3_with_size_header(int handle, void *ptr1, size_t len1, void* ptr2, size_t len2, void *ptr3, size_t len3);
 
 #endif /* DLT_USER_SHARED_H */
