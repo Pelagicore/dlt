@@ -296,13 +296,11 @@ int dlt_daemon_applications_clear(DltDaemon *daemon,int verbose)
     return 0;
 }
 
-DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid,pid_t pid,char *description, int verbose)
+DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid, int fd, pid_t pid,char *description, int verbose)
 {
     DltDaemonApplication *application;
 	DltDaemonApplication *old;
     int new_application;
-    int dlt_user_handle;
-	char filename[DLT_DAEMON_COMMON_TEXTBUFSIZE];
 
     if ((daemon==0) || (apid==0) || (apid[0]=='\0'))
     {
@@ -385,7 +383,7 @@ DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid,pi
         {
     		if ( close(application->user_handle) < 0 )
     		{
-    			snprintf(str,DLT_DAEMON_COMMON_TEXTBUFSIZE, "close() failed to %s, errno=%d (%s)!\n",filename,errno,strerror(errno)); /* errno 2: ENOENT - No such file or directory */
+    			snprintf(str,DLT_DAEMON_COMMON_TEXTBUFSIZE, "close() failed, errno=%d (%s)!\n",errno,strerror(errno)); /* errno 2: ENOENT - No such file or directory */
     		    dlt_log(LOG_WARNING, str);
     		}
 
@@ -397,22 +395,13 @@ DltDaemonApplication* dlt_daemon_application_add(DltDaemon *daemon,char *apid,pi
     /* open user pipe only if it is not yet opened */
     if (application->user_handle==DLT_FD_INIT && pid!=0)
     {
-        snprintf(filename,DLT_DAEMON_COMMON_TEXTBUFSIZE,"%s/dlt%d",DLT_USER_DIR,pid);
-
-        dlt_user_handle = open(filename, O_WRONLY|O_NONBLOCK);
-        if ( dlt_user_handle < 0 )
-        {
-            snprintf(str,DLT_DAEMON_COMMON_TEXTBUFSIZE, "open() failed to %s, errno=%d (%s)!\n",filename,errno,strerror(errno)); /* errno 2: ENOENT - No such file or directory */
-            dlt_log(LOG_WARNING, str);
-        } /* if */
-
         /* check if file file descriptor was already used, and make it invalid if it is reused */
         /* This prevents sending messages to wrong file descriptor */
-        dlt_daemon_applications_invalidate_fd(daemon,dlt_user_handle,verbose);
-        dlt_daemon_contexts_invalidate_fd(daemon,dlt_user_handle,verbose);
+        dlt_daemon_applications_invalidate_fd(daemon,fd,verbose);
+        dlt_daemon_contexts_invalidate_fd(daemon,fd,verbose);
 
         application->pid = pid;
-        application->user_handle = dlt_user_handle;
+        application->user_handle = fd;
     }
 
     /* Sort */
@@ -560,7 +549,7 @@ int dlt_daemon_applications_load(DltDaemon *daemon,const char *filename, int ver
 				{
 					/* pb contains now the description */
 					/* pid is unknown at loading time */
-					if (dlt_daemon_application_add(daemon,apid,0,pb,verbose)==0)
+					if (dlt_daemon_application_add(daemon,apid,0,0,pb,verbose)==0)
 					{
 						dlt_log(LOG_WARNING, "dlt_daemon_applications_load dlt_daemon_application_add failed\n");
 						fclose(fd);

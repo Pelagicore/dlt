@@ -37,6 +37,9 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include <sys/un.h>
+#include <sys/socket.h>
+
 #ifdef linux
 #include <sys/timerfd.h>
 #endif
@@ -182,7 +185,7 @@ int option_file_parser(DltDaemonLocal *daemon_local)
 	daemon_local->flags.offlineTraceMaxSize = 0;
 	daemon_local->flags.loggingMode = 0;
 	daemon_local->flags.loggingLevel = 6;
-	strncpy(daemon_local->flags.loggingFilename, DLT_USER_DIR "/dlt.log",sizeof(daemon_local->flags.loggingFilename)-1);
+	strncpy(daemon_local->flags.loggingFilename, DLT_RUN_DIR "/dlt.log",sizeof(daemon_local->flags.loggingFilename)-1);
 	daemon_local->flags.loggingFilename[sizeof(daemon_local->flags.loggingFilename)-1]=0;
 	daemon_local->timeoutOnSend = 4;
 	daemon_local->RingbufferMinSize = DLT_DAEMON_RINGBUFFER_MIN_SIZE;
@@ -394,6 +397,52 @@ int option_file_parser(DltDaemonLocal *daemon_local)
 	return 0;
 }
 
+
+pid_t getPidFromFiledescriptor(int fd) {
+#ifdef __linux__
+    /* get the PID of the client application */
+    struct ucred peercred;
+    socklen_t so_len = sizeof(peercred);
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peercred, &so_len) == -1) {
+        return 0;
+    }
+    return peercred.pid;
+
+#else
+    return 0;
+#endif
+}
+
+
+int dlt_daemon_process_client_connection(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose)
+{
+    // We got a new client connection
+
+    struct sockaddr remote = { };
+    socklen_t sizeOfStruct = sizeof(remote);
+
+    int clientConnectionFileDescriptor = accept(daemon_local->local_socket, &remote, &sizeOfStruct);
+    if (clientConnectionFileDescriptor == -1) {
+        dlt_log(LOG_ERR, "Failed to accept client connection !\n");
+        return -1;
+    }
+
+    size_t size = -1;
+
+    read(clientConnectionFileDescriptor, &size, sizeof(size));
+
+    void* buffer = malloc(size);
+    read(clientConnectionFileDescriptor, buffer, size);
+
+    pid_t pid = getPidFromFiledescriptor(clientConnectionFileDescriptor);
+
+    dlt_daemon_process_user_message_register_application(daemon, daemon_local, clientConnectionFileDescriptor, buffer, pid, verbose);
+
+    free(buffer);
+
+    return 0;
+}
+
 /**
  * Main function of tool.
  */
@@ -530,7 +579,16 @@ int main(int argc, char* argv[])
                     /* event from the FIFO happened */
                     if (dlt_daemon_process_user_messages(&daemon, &daemon_local, daemon_local.flags.vflag)==-1)
                     {
-                    	dlt_log(LOG_WARNING,"Processing of messages from user connection failed!\n");
+                        dlt_log(LOG_WARNING,"Processing of messages from user connection failed!\n");
+                        return -1;
+                    }
+                }
+                else if (i == daemon_local.local_socket)
+                {
+                    /* Connection request from the local socket */
+                    if (dlt_daemon_process_client_connection(&daemon, &daemon_local, daemon_local.flags.vflag)==-1)
+                    {
+                        dlt_log(LOG_CRIT,"Processing of new client connection failed!\n");
                         return -1;
                     }
                 }
@@ -663,20 +721,11 @@ int dlt_daemon_local_init_p1(DltDaemon *daemon, DltDaemonLocal *daemon_local, in
 #endif
 
     /* create dlt pipes directory */
-    ret=mkdir(DLT_USER_DIR, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH  | S_IWOTH | S_ISVTX );
+    ret=mkdir(DLT_RUN_DIR, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IROTH  | S_IWOTH | S_ISVTX );
     if (ret==-1 && errno != EEXIST)
     {
-        snprintf(str,DLT_DAEMON_TEXTBUFSIZE,"FIFO user dir %s cannot be created (%s)!\n", DLT_USER_DIR, strerror(errno));
-        dlt_log(LOG_WARNING, str);
-        return -1;
-    }
-
-    // S_ISGID cannot be set by mkdir, let's reassign right bits
-    ret=chmod(DLT_USER_DIR, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH  | S_IWOTH | S_IXOTH | S_ISGID | S_ISVTX );
-    if (ret==-1)
-    {
-        snprintf(str,DLT_DAEMON_TEXTBUFSIZE,"FIFO user dir %s cannot be chmoded (%s)!\n", DLT_USER_DIR, strerror(errno));
-        dlt_log(LOG_WARNING, str);
+        snprintf(str,DLT_DAEMON_TEXTBUFSIZE,"Runtime dir %s cannot be created!\n", DLT_RUN_DIR);
+        dlt_log(LOG_ERR, str);
         return -1;
     }
 
@@ -820,6 +869,33 @@ int dlt_daemon_local_connection_init(DltDaemon *daemon, DltDaemonLocal *daemon_l
         return -1;
     }
 
+    // Initialize UDS server socket
+    if ( ( daemon_local->local_socket = socket(AF_UNIX, SOCK_STREAM, 0) ) < 0 ) {
+        fprintf(stderr,"Failed to create socket");
+        return -1;
+    }
+
+    struct sockaddr_un local = {.sun_family = AF_UNIX};
+
+    strcpy(local.sun_path, DLT_USER_SOCKET_PATH);
+    unlink(local.sun_path);
+
+    if (bind( daemon_local->local_socket, (struct sockaddr*) &local,
+            strlen(local.sun_path) + sizeof(local.sun_family) ) != 0) {
+        fprintf(stderr,"Failed to bind server socket %s", DLT_USER_SOCKET_PATH);
+        return -1;
+    }
+
+    if (listen(daemon_local->local_socket, SOMAXCONN) != 0) {
+        fprintf(stderr,"Failed to listen to socket %s", DLT_USER_SOCKET_PATH);
+    }
+
+    // Allow the applications which run as a different user to connect
+    if (chmod(DLT_USER_SOCKET_PATH, S_IRWXU | S_IRWXG) != 0)
+    {
+        fprintf(stderr,"Failed to chmod socket : %s", DLT_USER_SOCKET_PATH);
+    }
+
     /* open named pipe(FIFO) to receive DLT messages from users */
     umask(0);
 
@@ -854,6 +930,7 @@ int dlt_daemon_local_connection_init(DltDaemon *daemon, DltDaemonLocal *daemon_l
     daemon_local->fdmax = daemon_local->sock;
 
     FD_SET(daemon_local->fp, &(daemon_local->master));
+    FD_SET(daemon_local->local_socket, &(daemon_local->master));
 
     if (daemon_local->fp > daemon_local->fdmax)
     {
@@ -1115,9 +1192,8 @@ void dlt_daemon_daemonize(int verbose)
     /* Set umask */
     umask(DLT_DAEMON_UMASK);
 
-    /* Change to known directory */
-    if(chdir(DLT_USER_DIR) < 0)
-        dlt_log(LOG_WARNING, "Failed to chdir to DLT_USER_DIR.\n");;
+    if(chdir(DLT_RUN_DIR) < 0)
+        dlt_log(LOG_WARNING, "Failed to chdir to DLT_RUN_DIR.\n");;
 
     /* Ensure single copy of daemon;
        run only one instance at a time */
@@ -1456,6 +1532,7 @@ int dlt_daemon_process_client_messages_serial(DltDaemon *daemon, DltDaemonLocal 
     return 0;
 }
 
+
 int dlt_daemon_process_user_messages(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose)
 {
     int offset=0;
@@ -1559,14 +1636,6 @@ int dlt_daemon_process_user_messages(DltDaemon *daemon, DltDaemonLocal *daemon_l
             break;
         }
 #endif
-        case DLT_USER_MESSAGE_REGISTER_APPLICATION:
-        {
-            if (dlt_daemon_process_user_message_register_application(daemon, daemon_local, daemon_local->flags.vflag)==-1)
-            {
-                run_loop=0;
-            }
-            break;
-        }
         case DLT_USER_MESSAGE_UNREGISTER_APPLICATION:
         {
             if (dlt_daemon_process_user_message_unregister_application(daemon, daemon_local, daemon_local->flags.vflag)==-1)
@@ -1692,7 +1761,7 @@ int dlt_daemon_send_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_l
     return DLT_DAEMON_ERROR_OK;
 }
 
-int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose)
+int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int fd, void* buf, pid_t pid, int verbose)
 {
     uint32_t len=0;
     DltDaemonApplication *application;
@@ -1701,19 +1770,7 @@ int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltD
 
     PRINT_FUNCTION_VERBOSE(verbose);
 
-    if ((daemon==0)  || (daemon_local==0))
-    {
-    	dlt_log(LOG_ERR, "Invalid function parameters used for function dlt_daemon_process_user_message_register_application()\n");
-        return -1;
-    }
-
-    if (daemon_local->receiver.bytesRcvd < (int32_t)(sizeof(DltUserHeader)+sizeof(DltUserControlMsgRegisterApplication)))
-    {
-    	/* Not enough bytes received */
-        return -1;
-    }
-
-    usercontext = (DltUserControlMsgRegisterApplication*) (daemon_local->receiver.buf+sizeof(DltUserHeader));
+    usercontext = (DltUserControlMsgRegisterApplication*) (buf+sizeof(DltUserHeader));
 
     memset(description,0,sizeof(description));
 
@@ -1721,26 +1778,19 @@ int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltD
     if ((len>0) && (len<=DLT_DAEMON_DESCSIZE))
     {
         /* Read and store application description */
-        strncpy(description, (daemon_local->receiver.buf+sizeof(DltUserHeader)+sizeof(DltUserControlMsgRegisterApplication)), len);
+        strncpy(description, (buf+sizeof(DltUserHeader)+sizeof(DltUserControlMsgRegisterApplication)), len);
         description[sizeof(description)-1]=0;
 
     }
 
-    application=dlt_daemon_application_add(daemon,usercontext->apid,usercontext->pid,description,verbose);
+    application=dlt_daemon_application_add(daemon,usercontext->apid, fd, pid,description,verbose);
 
 	/* send log state to new application */
 	dlt_daemon_user_send_log_state(daemon,application,verbose);
 
-    /* keep not read data in buffer */
-    if (dlt_receiver_remove(&(daemon_local->receiver),sizeof(DltUserHeader)+sizeof(DltUserControlMsgRegisterApplication)+len)==-1)
-	{
-		dlt_log(LOG_WARNING,"Can't remove bytes from receiver for user message register application\n");
-		return -1;
-    }
-
     if (application==0)
     {
-    	snprintf(str, DLT_DAEMON_TEXTBUFSIZE, "Can't add ApplicationID '%.4s' for PID %d\n", usercontext->apid, usercontext->pid);
+    	snprintf(str, DLT_DAEMON_TEXTBUFSIZE, "Can't add ApplicationID '%.4s' for PID %d\n", usercontext->apid, pid);
     	dlt_log(LOG_WARNING,str);
         return -1;
     } else

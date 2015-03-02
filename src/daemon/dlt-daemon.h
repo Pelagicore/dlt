@@ -115,6 +115,7 @@ typedef struct
 {
     DltDaemonFlags flags;     /**< flags of the daemon */
     int fp;               /**< handle for own fifo */
+    int local_socket;               /**< handle for local socket */
     int sock;             /**< handle for tcp connection to client */
     int fdserial;         /**< handle for serial connection */
     int fdmax;            /**< highest number of used handles */
@@ -180,7 +181,7 @@ int dlt_daemon_process_user_messages(DltDaemon *daemon, DltDaemonLocal *daemon_l
 
 int dlt_daemon_process_user_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 int dlt_daemon_send_message_overflow(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
-int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
+int dlt_daemon_process_user_message_register_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int fd, void* buf, pid_t pid, int verbose);
 int dlt_daemon_process_user_message_unregister_application(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 int dlt_daemon_process_user_message_register_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
 int dlt_daemon_process_user_message_unregister_context(DltDaemon *daemon, DltDaemonLocal *daemon_local, int verbose);
